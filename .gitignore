@@ -1,0 +1,81 @@
+# Gradle files
+.gradle/
+build/
+
+# Local configuration files
+.gradle/
+.idea/
+.vscode/
+*.iml
+
+# Ignore Gradle Wrapper JARs
+gradle/wrapper/gradle-wrapper.jar
+
+# Ignore Gradle Wrapper properties
+gradle/wrapper/gradle-wrapper.properties
+
+# Ignore Gradle Wrapper binaries
+gradle/wrapper/gradle-wrapper.properties
+gradlew
+gradlew.bat
+
+# Ignore IntelliJ IDEA project files
+*.iws
+*.iml
+*.ipr
+.idea/
+
+# Ignore Eclipse project files
+.project
+.classpath
+.c9/
+.settings/
+
+# Ignore VS Code project files
+.vscode/
+
+# Ignore macOS files
+.DS_Store
+
+# Ignore Linux files
+*~
+
+# Ignore Windows files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Ignore Java class files
+*.class
+
+# Ignore log files
+*.log
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Ignore generated files
+*.jar
+*.war
+*.ear
+
+# Ignore build output directories
+out/
+bin/
+build/
+
+# Ignore Kotlin specific files
+*.kotlin_metadata
+
+# Ignore test reports
+test-results/
+test-output/
+
+# Add these lines to your existing .gitignore
+local.properties
+.externalNativeBuild
+.cxx
