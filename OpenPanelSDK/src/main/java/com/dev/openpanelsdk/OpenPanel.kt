@@ -1,0 +1,471 @@
+package com.dev.openpanelsdk
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.os.Build
+import android.os.Bundle
+import android.telephony.TelephonyManager
+import android.util.DisplayMetrics
+import android.util.Log
+import android.view.WindowManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentLinkedQueue
+
+// MARK: - OpenPanel Class
+
+class OpenPanel(private val context: Context, private val options: Options) {
+    private val api: Api
+    private var profileId: String? = null
+    private val globalProperties = ConcurrentLinkedQueue<Pair<String, Any>>()
+    private var mSystemInformation: SystemInformation? = null
+    private var queue = ConcurrentLinkedQueue<Payload>()
+    private val coroutineScope = CoroutineScope(Dispatchers.Default)
+
+    data class Options(
+        val clientId: String,
+        var clientSecret: String? = null,
+        var apiUrl: String? = null,
+        var waitForProfile: Boolean? = null,
+        var filter: ((Payload) -> Boolean)? = null,
+        var disabled: Boolean? = null,
+        var automaticTracking: Boolean? = null,
+        var verbose: Boolean = false  // Add this line
+    )
+
+    companion object {
+        const val sdkVersion = "0.0.1"
+
+        fun create(context: Context, options: Options): OpenPanel {
+            return OpenPanel(context, options)
+        }
+
+        private fun isAndroidEnvironment(): Boolean {
+            return try {
+                Class.forName("android.app.Activity")
+                true
+            } catch (e: ClassNotFoundException) {
+                false
+            }
+        }
+    }
+
+    private fun getUserAgent(): String {
+        // Remove WebView-specific code
+        return "OpenPanelKotlin/$sdkVersion"
+    }
+
+
+    init {
+        val defaultHeaders = mutableMapOf(
+            "openpanel-client-id" to options.clientId,
+            "openpanel-sdk-name" to "kotlin",
+            "openpanel-sdk-version" to sdkVersion,
+            "user-agent" to getUserAgent()
+        )
+        // Fetch system information
+        mSystemInformation = SystemInformation.getInstance(context)
+
+        options.clientSecret?.let { defaultHeaders["openpanel-client-secret"] = it }
+
+        api = Api(
+            Api.Config(
+                baseUrl = options.apiUrl ?: "https://api.openpanel.dev",
+                defaultHeaders = defaultHeaders,
+                verbose = options.verbose  // Add this line
+            )
+        )
+
+        if (options.automaticTracking == true) {
+            setupAutomaticTracking()
+        }
+    }
+
+    fun ready() {
+        options.waitForProfile = false
+        flush()
+    }
+
+    private fun send(payload: Payload) {
+        if (options.disabled == true) return
+        if (options.filter?.invoke(payload) == false) return
+        if (options.waitForProfile == true && profileId == null && payload !is IdentifyPayload) {
+            queue.add(payload)
+            return
+        }
+
+        coroutineScope.launch {
+            val updatedPayload = ensureProfileId(payload)
+            // Merge default event properties with existing properties before sending
+            val mergedPayload = mergeDefaultProperties(updatedPayload)
+            when (val result = api.fetch("/track", mergedPayload.toJson())) {
+                is Result.Success -> { /* Handle success if needed */
+                }
+
+                is Result.Failure -> logError("Error sending payload: ${result.error}")
+            }
+        }
+    }
+
+    private fun mergeDefaultProperties(payload: Payload): Payload {
+        val defaultProperties = getDefaultEventProperties() // Get system properties
+
+        return when (payload) {
+            is TrackPayload -> {
+                // Merge default properties with event properties
+                val mergedProperties =
+                    (defaultProperties.toMap() + (payload.properties ?: emptyMap())).toMutableMap()
+                payload.copy(properties = mergedProperties)
+            }
+
+            else -> payload // For other payloads, return as-is
+        }
+    }
+
+    private fun ensureProfileId(payload: Payload): Payload {
+        return when (payload) {
+            is TrackPayload -> payload.copy(profileId = payload.profileId ?: this.profileId)
+            else -> payload
+        }
+    }
+
+    fun setGlobalProperties(properties: Properties) {
+        globalProperties.addAll(properties.map { it.key to it.value })
+    }
+
+    fun track(name: String, properties: Properties? = null) {
+        val mergedProperties =
+            (globalProperties.toMap() + (properties ?: emptyMap())).toMutableMap()
+        send(
+            TrackPayload(
+                name = name,
+                properties = mergedProperties,
+                profileId = properties?.get("profileId") as? String ?: profileId
+            )
+        )
+    }
+
+    fun identify(profileId: String, traits: Properties? = null) {
+        this.profileId = profileId
+        flush()
+
+        val mergedTraits = (globalProperties.toMap() + (traits ?: emptyMap())).toMutableMap()
+        send(IdentifyPayload(
+            profileId = profileId,
+            firstName = mergedTraits["firstName"] as? String,
+            lastName = mergedTraits["lastName"] as? String,
+            email = mergedTraits["email"] as? String,
+            avatar = mergedTraits["avatar"] as? String,
+            properties = mergedTraits.filterKeys {
+                it !in setOf(
+                    "firstName",
+                    "lastName",
+                    "email",
+                    "avatar"
+                )
+            }
+        ))
+    }
+
+    fun alias(profileId: String, alias: String) {
+        send(AliasPayload(profileId = profileId, alias = alias))
+    }
+
+    fun increment(profileId: String, property: String, value: Int? = null) {
+        send(IncrementPayload(profileId = profileId, property = property, value = value))
+    }
+
+    fun decrement(profileId: String, property: String, value: Int? = null) {
+        send(DecrementPayload(profileId = profileId, property = property, value = value))
+    }
+
+    fun clear() {
+        profileId = null
+        globalProperties.clear()
+    }
+
+    fun flush() {
+        val currentQueue = queue.toList()
+        queue.clear()
+        currentQueue.forEach { send(it) }
+    }
+
+    private fun getDefaultEventProperties(): Map<String, Any> {
+        val ret = mutableMapOf<String, Any>()
+
+        ret["op_lib"] = "android"
+        ret["lib_version"] = sdkVersion
+
+        // For querying together with data from other libraries
+        ret["os"] = "Android"
+        ret["os_version"] = Build.VERSION.RELEASE ?: "UNKNOWN"
+
+        ret["manufacturer"] = Build.MANUFACTURER ?: "UNKNOWN"
+        ret["brand"] = Build.BRAND ?: "UNKNOWN"
+        ret["model"] = Build.MODEL ?: "UNKNOWN"
+
+        val displayMetrics = mSystemInformation?.displayMetrics
+        ret["screen_dpi"] = displayMetrics?.densityDpi ?: "UNKNOWN"
+        ret["screen_height"] = displayMetrics?.heightPixels ?: "UNKNOWN"
+        ret["screen_width"] = displayMetrics?.widthPixels ?: "UNKNOWN"
+
+        val applicationVersionName = mSystemInformation?.appVersionName
+        if (applicationVersionName != null) {
+            ret["app_version"] = applicationVersionName
+        }
+
+        val applicationVersionCode = mSystemInformation?.appVersionCode
+        if (applicationVersionCode != null) {
+            val applicationVersion = applicationVersionCode.toString()
+            ret["app_release"] = applicationVersion
+            ret["app_build_number"] = applicationVersion
+        }
+
+        val hasNFC = mSystemInformation?.hasNFC
+        if (hasNFC != null) {
+            ret["has_nfc"] = hasNFC
+        }
+
+        val hasTelephony = mSystemInformation?.hasTelephony
+        if (hasTelephony != null) {
+            ret["has_telephone"] = hasTelephony
+        }
+
+        val carrier = mSystemInformation?.getCurrentNetworkOperator()
+        if (!carrier.isNullOrBlank()) {
+            ret["carrier"] = carrier
+        }
+
+        val isWifi = mSystemInformation?.isWifiConnected()
+        if (isWifi != null) {
+            ret["wifi"] = isWifi
+        }
+
+        val isBluetoothEnabled = mSystemInformation?.isBluetoothEnabled()
+        if (isBluetoothEnabled != null) {
+            ret["bluetooth_enabled"] = isBluetoothEnabled
+        }
+
+        val bluetoothVersion = mSystemInformation?.getBluetoothVersion()
+        if (bluetoothVersion != null) {
+            ret["bluetooth_version"] = bluetoothVersion
+        }
+
+        return ret
+    }
+
+
+    private fun setupAutomaticTracking() {
+        // Registering activity lifecycle callbacks for automatic tracking
+        (context.applicationContext as Application).registerActivityLifecycleCallbacks(
+            OpenPanelActivityLifeCycleCallbacks(this)
+        )
+    }
+
+    fun isAndroidEnvironment(): Boolean = false
+
+    private fun logVerbose(message: String) {
+        if (options.verbose) {
+            Log.d("OpenPanel", "OpenPanel : $message")
+        }
+    }
+
+    private fun logError(message: String) {
+        Log.e("OpenPanel", "OpenPanel Error: $message")
+    }
+}
+
+// MARK: - Payload Types
+
+typealias Properties = Map<String, Any>
+
+sealed class Payload {
+    abstract fun toJson(): JSONObject
+}
+
+data class TrackPayload(
+    val name: String,
+    val properties: Properties? = null,
+    val profileId: String? = null
+) : Payload() {
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("type", "track")
+        put("payload", JSONObject().apply {
+            put("name", name)
+            properties?.let { put("properties", JSONObject(it)) }
+            profileId?.let { put("profileId", it) }
+        })
+    }
+}
+
+data class IdentifyPayload(
+    val profileId: String,
+    val firstName: String? = null,
+    val lastName: String? = null,
+    val email: String? = null,
+    val avatar: String? = null,
+    val properties: Properties? = null
+) : Payload() {
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("type", "identify")
+        put("payload", JSONObject().apply {
+            put("profileId", profileId)
+            firstName?.let { put("firstName", it) }
+            lastName?.let { put("lastName", it) }
+            email?.let { put("email", it) }
+            avatar?.let { put("avatar", it) }
+            properties?.let { put("properties", JSONObject(it)) }
+        })
+    }
+}
+
+data class AliasPayload(
+    val profileId: String,
+    val alias: String
+) : Payload() {
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("type", "alias")
+        put("payload", JSONObject().apply {
+            put("profileId", profileId)
+            put("alias", alias)
+        })
+    }
+}
+
+data class IncrementPayload(
+    val profileId: String,
+    val property: String,
+    val value: Int? = null
+) : Payload() {
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("type", "increment")
+        put("payload", JSONObject().apply {
+            put("profileId", profileId)
+            put("property", property)
+            value?.let { put("value", it) }
+        })
+    }
+}
+
+data class DecrementPayload(
+    val profileId: String,
+    val property: String,
+    val value: Int? = null
+) : Payload() {
+    override fun toJson(): JSONObject = JSONObject().apply {
+        put("type", "decrement")
+        put("payload", JSONObject().apply {
+            put("profileId", profileId)
+            put("property", property)
+            value?.let { put("value", it) }
+        })
+    }
+}
+// MARK: - Api Class
+
+class Api(private val config: Config) {
+    data class Config(
+        val baseUrl: String,
+        val defaultHeaders: Map<String, String>? = null,
+        val maxRetries: Int = 3,
+        val initialRetryDelay: Long = 500,
+        val verbose: Boolean = false  // Add this line
+    )
+
+    private val headers = (config.defaultHeaders ?: emptyMap()).toMutableMap()
+
+    init {
+        headers["Content-Type"] = "application/json"
+    }
+
+    fun addHeader(key: String, value: String) {
+        headers[key] = value
+    }
+
+    private fun logVerbose(message: String) {
+        if (config.verbose) {
+            Log.d("OpenPanel","OpenPanel: $message")
+        }
+    }
+
+    suspend fun fetch(
+        path: String,
+        data: JSONObject,
+        options: Map<String, Any> = emptyMap()
+    ): Result<String> {
+        logVerbose("Fetching data from $path")
+        return withContext(Dispatchers.IO) {
+            var attempt = 0
+            var lastError: Exception? = null
+
+            while (attempt < config.maxRetries) {
+                try {
+                    logVerbose("Attempt ${attempt + 1} of ${config.maxRetries}")
+                    val url = URL(config.baseUrl + path)
+                    val connection = url.openConnection() as HttpURLConnection
+                    connection.requestMethod = "POST"
+                    connection.connectTimeout = 5000 // 5 seconds timeout
+                    connection.readTimeout = 5000 // 5 seconds timeout
+                    headers.forEach { (key, value) ->
+                        connection.setRequestProperty(key, value)
+                        logVerbose("Setting header $key: $value")
+                    }
+                    options.forEach { (key, value) ->
+                        if (value is String) {
+                            connection.setRequestProperty(key, value)
+                            logVerbose("Setting option $key: $value")
+                        }
+                    }
+
+                    connection.doOutput = true
+                    connection.outputStream.use { it.write(data.toString().toByteArray()) }
+                    logVerbose("Sending data: ${data.toString()}")
+
+                    val responseCode = connection.responseCode
+                    logVerbose("Response code: $responseCode")
+                    if (responseCode in 200..299) {
+                        val response = connection.inputStream.bufferedReader().use { it.readText() }
+                        return@withContext Result.Success(response)
+                    } else {
+                        val errorResponse =
+                            connection.errorStream?.bufferedReader()?.use { it.readText() }
+                        logVerbose("Error response: $errorResponse")
+                        throw Exception("HTTP error: $responseCode, Error response: $errorResponse")
+                    }
+                } catch (e: Exception) {
+                    lastError = e
+                    attempt++
+                    logVerbose("Error occurred: ${e.message}")
+                    e.printStackTrace() // Keep this for debugging purposes
+                    if (attempt < config.maxRetries) {
+                        val delayTime = config.initialRetryDelay * (1 shl (attempt - 1))
+                        logVerbose("Retrying in $delayTime ms")
+                        delay(delayTime)
+                    }
+                }
+            }
+
+            logVerbose("All attempts failed")
+            Result.Failure(lastError ?: Exception("Unknown error"))
+        }
+    }
+}
+
+sealed class Result<out T> {
+    data class Success<out T>(val value: T) : Result<T>()
+    data class Failure(val error: Exception) : Result<Nothing>()
+}

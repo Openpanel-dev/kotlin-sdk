@@ -1,11 +1,24 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
-        google() // Add Google Maven repository
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-rootProject.name = "dev.openpanel"
-include("main", "android")
-
+rootProject.name = "OpenPanel"
+include(":app")
+include(":OpenPanelSDK")

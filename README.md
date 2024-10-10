@@ -23,23 +23,35 @@ First, import the SDK and initialize it with your client ID:
 ```kotlin
 import dev.openpanel.OpenPanel
 
-val op = OpenPanel(OpenPanel.Options(
+val op = OpenPanel.create(
+    context,
+    OpenPanel.Options(
     clientId = "YOUR_CLIENT_ID",
     clientSecret = "YOUR_CLIENT_SECRET"
 ))
 ```
 
-### Options
+## Parameters
 
-When initializing the SDK, you can provide several options:
+### `context`
+- **Type**: `Context`
+- **Required**: Yes
+- **Description**: Android `Context` used for initializing the SDK.
 
-- `clientId` (required): Your OpenPanel client ID.
-- `clientSecret` (optional): Your OpenPanel client secret.
-- `apiUrl` (optional): Custom API URL if you're not using the default OpenPanel API.
-- `waitForProfile` (optional): Wait for a profile to be set before sending events.
-- `filter` (optional): A function to filter events before sending.
-- `disabled` (optional): Set to `true` to disable event sending.
-- `automaticTracking` (optional): Set to `true` to enable automatic app lifecycle tracking.
+### `Options`
+- **Type**: `OpenPanel.Options`
+- **Required**: Yes
+- **Description**: Configuration options for the SDK. Contains parameters for client ID, client secret, and other settings.
+
+#### Options Fields:
+- `clientId`: Required, your OpenPanel client ID.
+- `clientSecret`: Optional, your OpenPanel client secret.
+- `apiUrl`: Optional, custom API URL.
+- `waitForProfile`: Optional, delays sending events until profile is set.
+- `filter`: Optional, filters events before sending.
+- `disabled`: Optional, disables event sending.
+- `automaticTracking`: Optional, enables automatic tracking.
+- `verbose`: Optional, enables verbose logging.
 
 ### Tracking Events
 
@@ -135,6 +147,16 @@ val op = OpenPanel(OpenPanel.Options(
 ## Automatic Tracking
 
 The SDK can automatically track app lifecycle events if `automaticTracking` is set to `true`. This will track "app_opened" and "app_closed" events.
+
+### System Information
+
+The SDK automatically gathers system information and adds it to the properties of every tracking event. This includes:
+
+- OS details (e.g., `os`, `os_version`)
+- Device manufacturer, brand, and model (e.g., `manufacturer`, `brand`, `model`)
+- Screen resolution and DPI (e.g., `screen_width`, `screen_height`, `screen_dpi`)
+- App version (e.g., `app_version`, `app_build_number`)
+- Network details (e.g., `wifi`, `carrier`, `bluetooth_enabled`)
 
 ## Thread Safety
 
