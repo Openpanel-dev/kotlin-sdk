@@ -1,21 +1,9 @@
 package com.dev.openpanelsdk
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.Application
-import android.bluetooth.BluetoothAdapter
 import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.os.Build
-import android.os.Bundle
-import android.telephony.TelephonyManager
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
+import android.webkit.WebView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -65,8 +53,12 @@ class OpenPanel(private val context: Context, private val options: Options) {
     }
 
     private fun getUserAgent(): String {
-        // Remove WebView-specific code
-        return "OpenPanelKotlin/$sdkVersion"
+        return try {
+            System.getProperty("http.agent")?.toString()
+                ?: WebView(context).settings.userAgentString
+        }catch (_:Exception){
+            ""
+        }
     }
 
 
@@ -207,62 +199,50 @@ class OpenPanel(private val context: Context, private val options: Options) {
     private fun getDefaultEventProperties(): Map<String, Any> {
         val ret = mutableMapOf<String, Any>()
 
-        ret["op_lib"] = "android"
-        ret["lib_version"] = sdkVersion
-
-        // For querying together with data from other libraries
-        ret["os"] = "Android"
-        ret["os_version"] = Build.VERSION.RELEASE ?: "UNKNOWN"
-
-        ret["manufacturer"] = Build.MANUFACTURER ?: "UNKNOWN"
-        ret["brand"] = Build.BRAND ?: "UNKNOWN"
-        ret["model"] = Build.MODEL ?: "UNKNOWN"
-
         val displayMetrics = mSystemInformation?.displayMetrics
-        ret["screen_dpi"] = displayMetrics?.densityDpi ?: "UNKNOWN"
-        ret["screen_height"] = displayMetrics?.heightPixels ?: "UNKNOWN"
-        ret["screen_width"] = displayMetrics?.widthPixels ?: "UNKNOWN"
+        ret["__screenDpi"] = displayMetrics?.densityDpi ?: "UNKNOWN"
+        ret["__screenHeight"] = displayMetrics?.heightPixels ?: "UNKNOWN"
+        ret["__screenWidth"] = displayMetrics?.widthPixels ?: "UNKNOWN"
 
         val applicationVersionName = mSystemInformation?.appVersionName
         if (applicationVersionName != null) {
-            ret["app_version"] = applicationVersionName
+            ret["__version"] = applicationVersionName
         }
 
         val applicationVersionCode = mSystemInformation?.appVersionCode
         if (applicationVersionCode != null) {
             val applicationVersion = applicationVersionCode.toString()
-            ret["app_release"] = applicationVersion
-            ret["app_build_number"] = applicationVersion
+            ret["__buildNumber"] = applicationVersion
         }
 
         val hasNFC = mSystemInformation?.hasNFC
         if (hasNFC != null) {
-            ret["has_nfc"] = hasNFC
+            ret["__hasNfc"] = hasNFC
         }
 
         val hasTelephony = mSystemInformation?.hasTelephony
         if (hasTelephony != null) {
-            ret["has_telephone"] = hasTelephony
+            ret["__hasTelephone"] = hasTelephony
         }
 
         val carrier = mSystemInformation?.getCurrentNetworkOperator()
         if (!carrier.isNullOrBlank()) {
-            ret["carrier"] = carrier
+            ret["__carrier"] = carrier
         }
 
         val isWifi = mSystemInformation?.isWifiConnected()
         if (isWifi != null) {
-            ret["wifi"] = isWifi
+            ret["__wifi"] = isWifi
         }
 
         val isBluetoothEnabled = mSystemInformation?.isBluetoothEnabled()
         if (isBluetoothEnabled != null) {
-            ret["bluetooth_enabled"] = isBluetoothEnabled
+            ret["__bluetoothEnabled"] = isBluetoothEnabled
         }
 
         val bluetoothVersion = mSystemInformation?.getBluetoothVersion()
         if (bluetoothVersion != null) {
-            ret["bluetooth_version"] = bluetoothVersion
+            ret["__bluetoothVersion"] = bluetoothVersion
         }
 
         return ret
