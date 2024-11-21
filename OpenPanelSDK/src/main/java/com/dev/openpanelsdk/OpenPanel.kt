@@ -2,6 +2,7 @@ package com.dev.openpanelsdk
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.webkit.WebView
 import kotlinx.coroutines.CoroutineScope
@@ -198,6 +199,9 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getDefaultEventProperties(): Map<String, Any> {
         val ret = mutableMapOf<String, Any>()
+
+        ret["__brand"] = Build.BRAND ?: "UNKNOWN"
+        ret["__model"] = Build.MODEL ?: "UNKNOWN"
 
         val displayMetrics = mSystemInformation?.displayMetrics
         ret["__screenDpi"] = displayMetrics?.densityDpi ?: "UNKNOWN"
