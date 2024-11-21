@@ -55,8 +55,8 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getUserAgent(): String {
         return try {
-            System.getProperty("http.agent")?.toString()
-                ?: WebView(context).settings.userAgentString
+            WebView(context).settings.userAgentString
+                ?: System.getProperty("http.agent")?.toString()
         }catch (_:Exception){
             ""
         }
@@ -199,6 +199,10 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getDefaultEventProperties(): Map<String, Any> {
         val ret = mutableMapOf<String, Any>()
+        
+        ret["__osVersion"] = Build.VERSION.RELEASE
+        ret["__brand"] = Build.BRAND
+        ret["__model"] = Build.MODEL
 
         ret["__brand"] = Build.BRAND ?: "UNKNOWN"
         ret["__model"] = Build.MODEL ?: "UNKNOWN"
