@@ -55,8 +55,8 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getUserAgent(): String {
         return try {
-            WebView(context).settings.userAgentString
-                ?: System.getProperty("http.agent")?.toString()
+            System.getProperty("http.agent")?.toString()
+                ?: WebView(context).settings.userAgentString
         }catch (_:Exception){
             ""
         }
