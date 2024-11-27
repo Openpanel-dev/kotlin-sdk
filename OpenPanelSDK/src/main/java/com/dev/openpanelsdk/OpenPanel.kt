@@ -55,8 +55,8 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getUserAgent(): String {
         return try {
-            System.getProperty("http.agent")?.toString()
-                ?: WebView(context).settings.userAgentString
+            WebView(context).settings.userAgentString
+                ?: (System.getProperty("http.agent")?.toString() ?: "")
         }catch (_:Exception){
             ""
         }
@@ -204,13 +204,10 @@ class OpenPanel(private val context: Context, private val options: Options) {
         ret["__brand"] = Build.BRAND
         ret["__model"] = Build.MODEL
 
-        ret["__brand"] = Build.BRAND ?: "UNKNOWN"
-        ret["__model"] = Build.MODEL ?: "UNKNOWN"
-
         val displayMetrics = mSystemInformation?.displayMetrics
-        ret["__screenDpi"] = displayMetrics?.densityDpi ?: "UNKNOWN"
-        ret["__screenHeight"] = displayMetrics?.heightPixels ?: "UNKNOWN"
-        ret["__screenWidth"] = displayMetrics?.widthPixels ?: "UNKNOWN"
+        ret["__screenDpi"] = displayMetrics?.densityDpi ?: "--"
+        ret["__screenHeight"] = displayMetrics?.heightPixels ?: "--"
+        ret["__screenWidth"] = displayMetrics?.widthPixels ?: "--"
 
         val applicationVersionName = mSystemInformation?.appVersionName
         if (applicationVersionName != null) {
