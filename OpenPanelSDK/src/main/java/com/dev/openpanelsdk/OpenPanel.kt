@@ -205,9 +205,9 @@ class OpenPanel(private val context: Context, private val options: Options) {
         ret["__model"] = Build.MODEL
 
         val displayMetrics = mSystemInformation?.displayMetrics
-        ret["__screenDpi"] = displayMetrics?.densityDpi ?: "--"
-        ret["__screenHeight"] = displayMetrics?.heightPixels ?: "--"
-        ret["__screenWidth"] = displayMetrics?.widthPixels ?: "--"
+        ret["__screenDpi"] = displayMetrics?.densityDpi ?: null
+        ret["__screenHeight"] = displayMetrics?.heightPixels ?: null
+        ret["__screenWidth"] = displayMetrics?.widthPixels ?: null
 
         val applicationVersionName = mSystemInformation?.appVersionName
         if (applicationVersionName != null) {
