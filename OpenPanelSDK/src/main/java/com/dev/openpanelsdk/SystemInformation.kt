@@ -3,11 +3,13 @@ package com.dev.openpanelsdk
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.telephony.TelephonyManager
 import android.util.DisplayMetrics
@@ -19,9 +21,12 @@ class SystemInformation private constructor(private val context: Context) {
     val appVersionName: String?
     val appVersionCode: Long?
     val appName: String
-    val hasNFC: Boolean?
-    val hasTelephony: Boolean?
-    val displayMetrics: DisplayMetrics = DisplayMetrics()
+    val hasNFC: Boolean
+    val hasTelephony: Boolean
+    private val _displayMetrics: DisplayMetrics = DisplayMetrics()
+
+    val displayMetrics: DisplayMetrics
+        get() = DisplayMetrics().also { it.setTo(_displayMetrics) }
 
     init {
         val packageManager = context.packageManager
@@ -35,10 +40,11 @@ class SystemInformation private constructor(private val context: Context) {
             foundAppVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 packageInfo.longVersionCode
             }else{
+                @Suppress("DEPRECATION")
                 packageInfo.versionCode.toLong()
             }
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.w(LOGTAG, "System information constructed with a context that apparently doesn't exist.")
+        } catch (_: PackageManager.NameNotFoundException) {
+            Log.w(LOG_TAG, "System information constructed with a context that apparently doesn't exist.")
         }
 
         val applicationInfo: ApplicationInfo = context.applicationInfo
@@ -52,23 +58,33 @@ class SystemInformation private constructor(private val context: Context) {
             context.getString(appNameStringId)
         }
 
-        // We can't count on these features being available on all devices.
-        var foundNFC: Boolean? = null
-        var foundTelephony: Boolean? = null
+        hasNFC = packageManager.hasSystemFeature(PackageManager.FEATURE_NFC)
+        hasTelephony = packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
 
-        try {
-            val hasSystemFeatureMethod = packageManager::class.java.getMethod("hasSystemFeature", String::class.java)
-            foundNFC = hasSystemFeatureMethod.invoke(packageManager, "android.hardware.nfc") as Boolean
-            foundTelephony = hasSystemFeatureMethod.invoke(packageManager, "android.hardware.telephony") as Boolean
-        } catch (e: Exception) {
-            Log.w(LOGTAG, "System version supports PackageManager.hasSystemFeature, but we were unable to call it.")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val windowMetrics = windowManager.currentWindowMetrics
+            val bounds = windowMetrics.bounds
+            
+            // Get display metrics from resources for density information
+            context.resources.displayMetrics.let { metrics ->
+                _displayMetrics.density = metrics.density
+                _displayMetrics.densityDpi = metrics.densityDpi
+                @Suppress("DEPRECATION")
+                _displayMetrics.scaledDensity = metrics.density * context.resources.configuration.fontScale
+                _displayMetrics.xdpi = metrics.xdpi
+                _displayMetrics.ydpi = metrics.ydpi
+            }
+
+            // Set dimensions from window bounds
+            _displayMetrics.widthPixels = bounds.width()
+            _displayMetrics.heightPixels = bounds.height()
+        } else {
+            @Suppress("DEPRECATION")
+            val display = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+            @Suppress("DEPRECATION")
+            display.getMetrics(_displayMetrics)
         }
-
-        hasNFC = foundNFC
-        hasTelephony = foundTelephony
-
-        val display = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
-        display.getMetrics(displayMetrics)
     }
 
     fun getCurrentNetworkOperator(): String? {
@@ -80,8 +96,9 @@ class SystemInformation private constructor(private val context: Context) {
     fun isWifiConnected(): Boolean? {
         if (context.checkCallingOrSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED) {
             val connManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val networkInfo = connManager.activeNetworkInfo
-            return networkInfo?.type == ConnectivityManager.TYPE_WIFI && networkInfo.isConnected
+            val network = connManager.activeNetwork ?: return false
+            val capabilities = connManager.getNetworkCapabilities(network) ?: return false
+            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         }
         return null
     }
@@ -90,12 +107,17 @@ class SystemInformation private constructor(private val context: Context) {
     fun isBluetoothEnabled(): Boolean? {
         return try {
             if (context.packageManager.checkPermission(Manifest.permission.BLUETOOTH, context.packageName) == PackageManager.PERMISSION_GRANTED) {
-                val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+                val bluetoothAdapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    context.getSystemService(BluetoothManager::class.java)?.adapter
+                } else {
+                    @Suppress("DEPRECATION")
+                    BluetoothAdapter.getDefaultAdapter()
+                }
                 bluetoothAdapter?.isEnabled
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -110,10 +132,12 @@ class SystemInformation private constructor(private val context: Context) {
     }
 
     companion object {
+        @SuppressLint("StaticFieldLeak") // Safe: stores applicationContext, not Activity/Service
         private var sInstance: SystemInformation? = null
         private val sInstanceLock = Any()
-        private const val LOGTAG = "OpenPanel.SysInfo"
+        private const val LOG_TAG = "OpenPanel.SysInfo"
 
+        @JvmStatic
         fun getInstance(context: Context): SystemInformation {
             synchronized(sInstanceLock) {
                 if (sInstance == null) {

@@ -205,50 +205,18 @@ class OpenPanel(private val context: Context, private val options: Options) {
         ret["__model"] = Build.MODEL
 
         val displayMetrics = mSystemInformation?.displayMetrics
-        ret["__screenDpi"] = displayMetrics?.densityDpi ?: null
-        ret["__screenHeight"] = displayMetrics?.heightPixels ?: null
-        ret["__screenWidth"] = displayMetrics?.widthPixels ?: null
+        displayMetrics?.densityDpi?.let { ret["__screenDpi"] = it }
+        displayMetrics?.heightPixels?.let { ret["__screenHeight"] = it }
+        displayMetrics?.widthPixels?.let { ret["__screenWidth"] = it }
 
-        val applicationVersionName = mSystemInformation?.appVersionName
-        if (applicationVersionName != null) {
-            ret["__version"] = applicationVersionName
-        }
-
-        val applicationVersionCode = mSystemInformation?.appVersionCode
-        if (applicationVersionCode != null) {
-            val applicationVersion = applicationVersionCode.toString()
-            ret["__buildNumber"] = applicationVersion
-        }
-
-        val hasNFC = mSystemInformation?.hasNFC
-        if (hasNFC != null) {
-            ret["__hasNfc"] = hasNFC
-        }
-
-        val hasTelephony = mSystemInformation?.hasTelephony
-        if (hasTelephony != null) {
-            ret["__hasTelephone"] = hasTelephony
-        }
-
-        val carrier = mSystemInformation?.getCurrentNetworkOperator()
-        if (!carrier.isNullOrBlank()) {
-            ret["__carrier"] = carrier
-        }
-
-        val isWifi = mSystemInformation?.isWifiConnected()
-        if (isWifi != null) {
-            ret["__wifi"] = isWifi
-        }
-
-        val isBluetoothEnabled = mSystemInformation?.isBluetoothEnabled()
-        if (isBluetoothEnabled != null) {
-            ret["__bluetoothEnabled"] = isBluetoothEnabled
-        }
-
-        val bluetoothVersion = mSystemInformation?.getBluetoothVersion()
-        if (bluetoothVersion != null) {
-            ret["__bluetoothVersion"] = bluetoothVersion
-        }
+        mSystemInformation?.appVersionName?.let { ret["__version"] = it }
+        mSystemInformation?.appVersionCode?.let { ret["__buildNumber"] = it.toString() }
+        mSystemInformation?.hasNFC?.let { ret["__hasNfc"] = it }
+        mSystemInformation?.hasTelephony?.let { ret["__hasTelephone"] = it }
+        mSystemInformation?.getCurrentNetworkOperator()?.takeIf { it.isNotBlank() }?.let { ret["__carrier"] = it }
+        mSystemInformation?.isWifiConnected()?.let { ret["__wifi"] = it }
+        mSystemInformation?.isBluetoothEnabled()?.let { ret["__bluetoothEnabled"] = it }
+        mSystemInformation?.getBluetoothVersion()?.let { ret["__bluetoothVersion"] = it }
 
         return ret
     }
