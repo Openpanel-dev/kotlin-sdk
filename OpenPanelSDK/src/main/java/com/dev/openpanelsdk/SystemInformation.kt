@@ -39,12 +39,15 @@ class SystemInformation private constructor(private val context: Context) {
             foundAppVersionName = packageInfo.versionName
             foundAppVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 packageInfo.longVersionCode
-            }else{
+            } else {
                 @Suppress("DEPRECATION")
                 packageInfo.versionCode.toLong()
             }
         } catch (_: PackageManager.NameNotFoundException) {
-            Log.w(LOG_TAG, "System information constructed with a context that apparently doesn't exist.")
+            Log.w(
+                LOG_TAG,
+                "System information constructed with a context that apparently doesn't exist."
+            )
         }
 
         val applicationInfo: ApplicationInfo = context.applicationInfo
@@ -66,7 +69,8 @@ class SystemInformation private constructor(private val context: Context) {
                 _displayMetrics.density = metrics.density
                 _displayMetrics.densityDpi = metrics.densityDpi
                 @Suppress("DEPRECATION")
-                _displayMetrics.scaledDensity = metrics.density * context.resources.configuration.fontScale
+                _displayMetrics.scaledDensity =
+                    metrics.density * context.resources.configuration.fontScale
                 _displayMetrics.xdpi = metrics.xdpi
                 _displayMetrics.ydpi = metrics.ydpi
                 _displayMetrics.widthPixels = metrics.widthPixels
@@ -74,21 +78,24 @@ class SystemInformation private constructor(private val context: Context) {
             }
         } else {
             @Suppress("DEPRECATION")
-            val display = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+            val display =
+                (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
             @Suppress("DEPRECATION")
             display.getMetrics(_displayMetrics)
         }
     }
 
     fun getCurrentNetworkOperator(): String? {
-        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        val telephonyManager =
+            context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
         return telephonyManager?.networkOperatorName
     }
 
     @SuppressLint("MissingPermission")
     fun isWifiConnected(): Boolean? {
         if (context.checkCallingOrSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE) == PackageManager.PERMISSION_GRANTED) {
-            val connManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val connManager =
+                context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             val network = connManager.activeNetwork ?: return false
             val capabilities = connManager.getNetworkCapabilities(network) ?: return false
             return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
@@ -97,28 +104,35 @@ class SystemInformation private constructor(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun isBluetoothEnabled(): Boolean? {
-        return try {
-            if (context.packageManager.checkPermission(Manifest.permission.BLUETOOTH, context.packageName) == PackageManager.PERMISSION_GRANTED) {
-                val bluetoothAdapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    context.getSystemService(BluetoothManager::class.java)?.adapter
-                } else {
-                    @Suppress("DEPRECATION")
-                    BluetoothAdapter.getDefaultAdapter()
-                }
-                bluetoothAdapter?.isEnabled
+    fun isBluetoothEnabled(context: Context): Boolean? {
+        val hasBluetoothPermission =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+                        PackageManager.PERMISSION_GRANTED
             } else {
-                null
+                @Suppress("DEPRECATION")
+                context.checkSelfPermission(Manifest.permission.BLUETOOTH) ==
+                        PackageManager.PERMISSION_GRANTED
             }
-        } catch (_: Exception) {
-            null
+
+        if (!hasBluetoothPermission) return null
+
+        val bluetoothAdapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(BluetoothManager::class.java)?.adapter
+        } else {
+            @Suppress("DEPRECATION")
+            BluetoothAdapter.getDefaultAdapter()
         }
+
+        return bluetoothAdapter?.isEnabled
     }
 
     fun getBluetoothVersion(): String {
         return when {
             context.packageManager.hasSystemFeature(
-                PackageManager.FEATURE_BLUETOOTH_LE) -> "ble"
+                PackageManager.FEATURE_BLUETOOTH_LE
+            ) -> "ble"
+
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH) -> "classic"
             else -> "none"
         }
