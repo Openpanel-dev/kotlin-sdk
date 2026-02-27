@@ -62,11 +62,6 @@ class SystemInformation private constructor(private val context: Context) {
         hasTelephony = packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val windowMetrics = windowManager.currentWindowMetrics
-            val bounds = windowMetrics.bounds
-            
-            // Get display metrics from resources for density information
             context.resources.displayMetrics.let { metrics ->
                 _displayMetrics.density = metrics.density
                 _displayMetrics.densityDpi = metrics.densityDpi
@@ -74,11 +69,9 @@ class SystemInformation private constructor(private val context: Context) {
                 _displayMetrics.scaledDensity = metrics.density * context.resources.configuration.fontScale
                 _displayMetrics.xdpi = metrics.xdpi
                 _displayMetrics.ydpi = metrics.ydpi
+                _displayMetrics.widthPixels = metrics.widthPixels
+                _displayMetrics.heightPixels = metrics.heightPixels
             }
-
-            // Set dimensions from window bounds
-            _displayMetrics.widthPixels = bounds.width()
-            _displayMetrics.heightPixels = bounds.height()
         } else {
             @Suppress("DEPRECATION")
             val display = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
