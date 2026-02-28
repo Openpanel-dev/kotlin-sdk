@@ -215,7 +215,7 @@ class OpenPanel(private val context: Context, private val options: Options) {
         mSystemInformation?.hasTelephony?.let { ret["__hasTelephone"] = it }
         mSystemInformation?.getCurrentNetworkOperator()?.takeIf { it.isNotBlank() }?.let { ret["__carrier"] = it }
         mSystemInformation?.isWifiConnected()?.let { ret["__wifi"] = it }
-        mSystemInformation?.isBluetoothEnabled()?.let { ret["__bluetoothEnabled"] = it }
+        mSystemInformation?.isBluetoothEnabled(context)?.let { ret["__bluetoothEnabled"] = it }
         mSystemInformation?.getBluetoothVersion()?.let { ret["__bluetoothVersion"] = it }
 
         return ret
