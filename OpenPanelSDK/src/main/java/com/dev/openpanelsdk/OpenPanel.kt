@@ -53,23 +53,20 @@ class OpenPanel(private val context: Context, private val options: Options) {
         }
     }
 
-    private fun getUserAgent(): String {
-        return try {
-            WebView(context).settings.userAgentString
-                ?: (System.getProperty("http.agent")?.toString() ?: "")
-        }catch (_:Exception){
-            ""
-        }
-    }
+    private fun getUserAgent(): String? = runCatching {
+        WebView(context).settings.userAgentString
+    }.getOrNull() ?: runCatching {
+        System.getProperty("http.agent")
+    }.getOrNull()
 
 
     init {
         val defaultHeaders = mutableMapOf(
             "openpanel-client-id" to options.clientId,
             "openpanel-sdk-name" to "kotlin",
-            "openpanel-sdk-version" to sdkVersion,
-            "user-agent" to getUserAgent()
+            "openpanel-sdk-version" to sdkVersion
         )
+        getUserAgent()?.let { defaultHeaders["user-agent"] = it }
         // Fetch system information
         mSystemInformation = SystemInformation.getInstance(context)
 
@@ -157,7 +154,8 @@ class OpenPanel(private val context: Context, private val options: Options) {
         flush()
 
         val mergedTraits = (globalProperties.toMap() + (traits ?: emptyMap())).toMutableMap()
-        send(IdentifyPayload(
+        send(
+            IdentifyPayload(
             profileId = profileId,
             firstName = mergedTraits["firstName"] as? String,
             lastName = mergedTraits["lastName"] as? String,
@@ -199,7 +197,7 @@ class OpenPanel(private val context: Context, private val options: Options) {
 
     private fun getDefaultEventProperties(): Map<String, Any> {
         val ret = mutableMapOf<String, Any>()
-        
+
         ret["__osVersion"] = Build.VERSION.RELEASE
         ret["__brand"] = Build.BRAND
         ret["__model"] = Build.MODEL
@@ -351,7 +349,7 @@ class Api(private val config: Config) {
 
     private fun logVerbose(message: String) {
         if (config.verbose) {
-            Log.d("OpenPanel","OpenPanel: $message")
+            Log.d("OpenPanel", "OpenPanel: $message")
         }
     }
 
@@ -386,7 +384,7 @@ class Api(private val config: Config) {
 
                     connection.doOutput = true
                     connection.outputStream.use { it.write(data.toString().toByteArray()) }
-                    logVerbose("Sending data: ${data.toString()}")
+                    logVerbose("Sending data: $data")
 
                     val responseCode = connection.responseCode
                     logVerbose("Response code: $responseCode")
